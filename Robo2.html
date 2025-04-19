@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Entrerium - Robô Cripto</title>
+  <script src="https://unpkg.com/@babel/polyfill@7.12.1/dist/polyfill.min.js"></script>
+  <script src="https://unpkg.com/technicalindicators@3.1.0/dist/browser.min.js"></script>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(180deg, #0a0a0a, #1a1a1a);
+      color: #0ff;
+      padding: 20px;
+      margin: 0;
+    }
+    h1 {
+      text-align: center;
+      font-size: 2.2em;
+      margin-bottom: 20px;
+      text-shadow: 0 0 10px #0ff;
+    }
+    h2 {
+      margin-top: 30px;
+      color: #0f8;
+      font-size: 1.5em;
+    }
+    select, button {
+      padding: 10px;
+      font-size: 1em;
+      margin: 10px 5px;
+      background: #111;
+      border: 1px solid #0ff;
+      color: #0ff;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: background 0.3s, color 0.3s;
+    }
+    button:hover {
+      background: #0ff;
+      color: #111;
+    }
+    iframe {
+      width: 100%;
+      height: 500px;
+      border: none;
+      margin-top: 10px;
+      border-radius: 5px;
+    }
+    #alertas li {
+      margin: 6px 0;
+      list-style: none;
+      font-size: 1em;
+    }
+    .painel {
+      background: #121212;
+      padding: 15px;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0, 255, 255, 0.2);
+      margin-bottom: 20px;
+    }
+    .error {
+      color: #f00;
+      font-size: 0.9em;
+      margin-top: 10px;
+    }
+    .info {
+      color: #ccc;
+      font-size: 0.9em;
+      margin-top: 10px;
+    }
+    @media (max-width: 768px) {
+      iframe {
+        height: 300px;
+      }
+      h1 {
+        font-size: 1.6em;
+      }
+      h2 {
+        font-size: 1.2em;
+      }
+      select, button {
+        width: 100%;
+        margin: 5px 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <h1>ENTRERIUM - Robô Cripto</h1>
+
+  <!-- SELEÇÃO DE MOEDA -->
+  <section class="painel">
+    <label for="cripto">Escolha a moeda:</label>
+    <select id="cripto">
+      <option value="BTCUSDT">Bitcoin (BTC)</option>
+      <option value="ETHUSDT">Ethereum (ETH)</option>
+      <option value="DOGEUSDT">Dogecoin (DOGE)</option>
+    </select>
+    <button onclick="atualizarTudo()">Atualizar Dados</button>
+  </section>
+
+  <!-- TRADINGVIEW -->
+  <section class="painel">
+    <h2>Gráfico Interativo</h2>
+    <iframe id="graficoTV" title="Gráfico de Criptomoedas TradingView"></iframe>
+  </section>
+
+  <!-- SENTIMENTO DE MERCADO -->
+  <section class="painel">
+    <h2>Sentimento de Mercado (Fear & Greed)</h2>
+    <p class="info">Índice Fear & Greed (visual). Nota: A leitura automática não está disponível devido a limitações da API.</p>
+    <iframe src="[invalid url, do not cite] height="250" title="Índice Fear & Greed"></iframe>
+    <p id="fear-greed-status" class="info"></p>
+  </section>
+
+  <!-- ALERTAS -->
+  <section class="painel">
+    <h2>Alertas de Compra/Venda</h2>
+    <ul id="alertas"></ul>
+  </section>
+
+  <script>
+    const simbolosTV = {
+      BTCUSDT: "BINANCE:BTCUSDT",
+      ETHUSDT: "BINANCE:ETHUSDT",
+      DOGEUSDT: "BINANCE:DOGEUSDT"
+    };
+
+    function atualizarGrafico(simbolo) {
+      const frame = document.getElementById("graficoTV");
+      const simboloTV = simbolosTV[simbolo] || simbolosTV.BTCUSDT;
+      frame.src = `[invalid url, do not cite]
+    }
+
+    async function calcularIndicadores(simbolo) {
+      try {
+        // Buscar dados de klines (15 minutos, últimos 200 candles)
+        const resposta = await fetch(`https://api.binance.com/api/v3/klines?symbol=${simbolo}&interval=15m&limit=200`);
+        if (!resposta.ok) throw new Error(`Falha ao buscar dados da Binance: ${resposta.statusText}`);
+        const klines = await resposta.json();
+
+        // Validar dados
+        if (!Array.isArray(klines) || klines.length < 50) {
+          throw new Error("Dados insuficientes para calcular indicadores");
+        }
+
+        // Extrair preços de fechamento e validar
+        const closes = klines.map(kline => parseFloat(kline[4])).filter(price => !isNaN(price));
+        if (closes.length < 50) {
+          throw new Error("Preços de fechamento inválidos ou insuficientes");
+        }
+
+        // Calcular RSI (período 14)
+        const rsiResult = window.technicalindicators.RSI.calculate({
+          values: closes,
+          period: 14
+        });
+        const rsi = rsiResult.length > 0 ? rsiResult[rsiResult.length - 1] : 50;
+
+        // Calcular MACD (12, 26, 9)
+        const macdResult = window.technicalindicators.MACD.calculate({
+          values: closes,
+          fastPeriod: 12,
+          slowPeriod: 26,
+          signalPeriod: 9,
+          SimpleMAOscillator: false,
+          SimpleMASignal: false
+        });
+        const macd = macdResult.length > 0 ? macdResult[macdResult.length - 1].MACD : 0;
+
+        return { rsi, macd };
+      } catch (e) {
+        throw new Error(`Erro ao calcular indicadores para ${simbolo}: ${e.message}`);
+      }
+    }
+
+    async function gerarAlerta(simbolo) {
+      const lista = document.getElementById("alertas");
+      try {
+        // Buscar preço atual
+        const respostaPreco = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${simbolo}`);
+        if (!respostaPreco.ok) throw new Error(`Falha ao buscar preço: ${respostaPreco.statusText}`);
+        const dadosPreco = await respostaPreco.json();
+        const preco = parseFloat(dadosPreco.price).toFixed(2);
+
+        // Calcular indicadores
+        const { rsi, macd } = await calcularIndicadores(simbolo);
+
+        const item = document.createElement("li");
+        const moeda = simbolo.replace("USDT", "");
+        let alerta = `${moeda}: $${preco} | RSI: ${rsi.toFixed(1)} | MACD: ${macd.toFixed(2)}`;
+
+        if (rsi < 30 && macd > 0) {
+          alerta += " → ALERTA de COMPRA";
+          item.style.color = "#0f0";
+        } else if (rsi > 70 && macd < 0) {
+          alerta += " → ALERTA de VENDA";
+          item.style.color = "#f00";
+        } else {
+          alerta += " → Aguardando sinal claro";
+          item.style.color = "#ccc";
+        }
+
+        item.textContent = alerta;
+        lista.prepend(item);
+
+        if (lista.childElementCount > 10) {
+          lista.removeChild(lista.lastChild);
+        }
+      } catch (e) {
+        const item = document.createElement("li");
+        item.textContent = `Erro ao atualizar ${simbolo.replace("USDT", "")}: ${e.message}`;
+        item.style.color = "#f00";
+        lista.prepend(item);
+      }
+    }
+
+    function atualizarSentimento() {
+      const status = document.getElementById("fear-greed-status");
+      status.textContent = "Índice Fear & Greed: Visual disponível abaixo (API não acessível diretamente).";
+    }
+
+    async function atualizarTudo() {
+      const simbolo = document.getElementById("cripto").value;
+      atualizarGrafico(simbolo);
+      await gerarAlerta(simbolo);
+      atualizarSentimento();
+    }
+
+    // Inicializa com BTC
+    atualizarTudo();
+    setInterval(atualizarTudo, 60000); // 60s para respeitar limites da API
+  </script>
+</body>
+</html>
